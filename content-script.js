@@ -6,1195 +6,677 @@ let userSettings = {};
 let problemData = [];
 let userSkillLevel = 'beginner';
 
-// Function to find the button container on the LeetCode page
-function findRandomButtonContainer() {
-  // Try multiple selectors to find the random button or its container
+// --- 1. FIND ORIGINAL BUTTON ---
+function findRandomButton() {
   const selectors = [
     'a[href="/problems/random-one-question/"]',
     'a[href*="random-one-question"]',
     'button[data-cy="random-question"]',
     '[data-cy="random-question"]',
     '.random-question-btn',
-    '.random-btn',
-    'button:contains("Random")',
-    'a:contains("Random")'
   ];
 
-  let randomButton = null;
-  
-  // Try each selector
   for (const selector of selectors) {
-    try {
-      if (selector.includes(':contains')) {
-        // Handle text-based selectors
-        const elements = document.querySelectorAll('a, button');
-        for (const el of elements) {
-          if (el.textContent.toLowerCase().includes('random')) {
-            randomButton = el;
-            break;
-          }
-        }
-      } else {
-        randomButton = document.querySelector(selector);
-      }
-      if (randomButton) break;
-    } catch (e) {
-      console.log('Selector failed:', selector, e);
-    }
+    const randomButton = document.querySelector(selector);
+    if (randomButton) return randomButton;
   }
 
+  // Text-based fallback
+  const elements = document.querySelectorAll('a, button');
+  for (const el of elements) {
+    // More specific check for "random" text to avoid other buttons
+    if (el.textContent.toLowerCase().trim() === 'random' || el.textContent.toLowerCase().includes('random one')) {
+      return el;
+    }
+  }
+  return null;
+}
+
+// --- 2. FIND CONTAINER FOR INJECTION ---
+function findButtonContainer(randomButton) {
   if (randomButton) {
-    // Try to find the parent container
     let container = randomButton.parentElement;
-    
-    // Look for common container classes
     const containerSelectors = [
-      '.flex', '.flex-row', '.gap-2', '.gap-3', '.gap-4',
-      '.space-x-2', '.space-x-3', '.space-x-4',
-      '[class*="flex"]', '[class*="gap"]', '[class*="space"]'
+      '.flex', // General flex container often used
+      '[class*="flex items-center"]' // Common pattern in headers/toolbars
     ];
-    
-    // Go up a few levels to find a good container
+
+    // Go up a few levels to find a suitable container
     for (let i = 0; i < 5 && container; i++) {
-      for (const selector of containerSelectors) {
-        if (container.matches(selector)) {
-          console.log('Found container at level', i, container);
-          return container;
+        // Check if it's a flex container likely holding buttons/links
+        if (containerSelectors.some(selector => container.matches(selector)) && container.children.length > 1) {
+            // Verify it contains interactive elements (button or a)
+             if (container.querySelector('button, a')) {
+                 console.log('Confirmed container:', container);
+                 return container;
+             }
         }
-      }
       container = container.parentElement;
     }
-    
-    // If no specific container found, return the immediate parent
-    return randomButton.parentElement;
+    console.log("Using immediate parent as fallback container:", randomButton.parentElement);
+    return randomButton.parentElement; // Return immediate parent as last resort
   }
 
-  // Fallback: look for common button areas
+  // Fallback: look for common button areas if randomBtn wasn't found
+   console.log("Original random button not found, searching for fallback containers...");
   const fallbackSelectors = [
+    'nav [class*="flex items-center"]', // Flex container inside nav
+    '.flex.items-center.gap-3',
     '.flex.gap-2', '.flex.gap-3', '.flex.gap-4',
     '.space-x-2', '.space-x-3', '.space-x-4',
-    '[class*="button"]', '[class*="action"]', '[class*="toolbar"]'
+    'div[class*="action"], div[class*="toolbar"]' // Divs likely containing actions
   ];
-
   for (const selector of fallbackSelectors) {
-    try {
-      const container = document.querySelector(selector);
-      if (container && container.children.length > 0) {
-        console.log('Found fallback container:', container);
-        return container;
-      }
-    } catch (e) {
-      console.log('Fallback selector failed:', selector, e);
-    }
-  }
-
-  // Last resort: create a container in the header area
-  const headerSelectors = [
-    'header', '.header', '[class*="header"]',
-    'nav', '.nav', '[class*="nav"]',
-    '.flex.items-center', '.flex.justify-between'
-  ];
-
-  for (const selector of headerSelectors) {
-    try {
-      const header = document.querySelector(selector);
-      if (header) {
-        console.log('Creating container in header:', header);
-        return header;
-      }
-    } catch (e) {
-      console.log('Header selector failed:', selector, e);
-    }
-  }
-
-  console.warn("Could not find any suitable button container on the page.");
-  return null;
-}
-
-// Enhanced function to check if a problem is solved
-function isProblemSolved(rowElement) {
-  // Multiple ways LeetCode indicates solved problems
-  const solvedIndicators = [
-    'svg.text-green-s', // Green checkmark
-    'svg[data-icon="fa-check"]', // Check icon
-    '.text-green-s', // Green text class
-    '[data-status="solved"]' // Data attribute
-  ];
-  
-  return solvedIndicators.some(selector => rowElement.querySelector(selector));
-}
-
-// Enhanced function to check if a problem is premium
-function isProblemPremium(rowElement) {
-  // Multiple ways LeetCode indicates premium problems
-  const premiumIndicators = [
-    'svg[data-icon="fa-lock"]', // Lock icon
-    'svg[data-icon="fa-crown"]', // Crown icon
-    '.text-yellow-s', // Yellow text (premium indicator)
-    '[data-premium="true"]', // Data attribute
-    '.premium-badge' // Premium badge class
-  ];
-  
-  return premiumIndicators.some(selector => rowElement.querySelector(selector));
-}
-
-// Function to get problem difficulty
-function getProblemDifficulty(rowElement) {
-  const difficultyElements = rowElement.querySelectorAll('[class*="difficulty"]');
-  for (const element of difficultyElements) {
-    const className = element.className.toLowerCase();
-    if (className.includes('easy')) return 'easy';
-    if (className.includes('medium')) return 'medium';
-    if (className.includes('hard')) return 'hard';
-  }
-  return 'medium'; // Default fallback
-}
-
-// Enhanced function to get problem topics
-function getProblemTopics(rowElement) {
-  const topicElements = rowElement.querySelectorAll('a[href*="/tag/"], [class*="tag"]');
-  const topics = [];
-  
-  topicElements.forEach(el => {
-    let topic = '';
-    if (el.href) {
-      // Extract topic from URL
-      topic = el.href.split('/').pop();
-    } else if (el.textContent) {
-      // Extract topic from text content
-      topic = el.textContent.trim().toLowerCase();
-    }
-    
-    if (topic && !topics.includes(topic)) {
-      topics.push(topic);
-    }
-  });
-  
-  return topics;
-}
-
-// Function to get problem ID and title
-function getProblemInfo(rowElement) {
-  const linkElement = rowElement.querySelector('a[href*="/problems/"]');
-  if (linkElement) {
-    const href = linkElement.href;
-    const problemId = href.split('/problems/')[1]?.split('/')[0];
-    const title = linkElement.textContent?.trim();
-    return { id: problemId, title, href };
-  }
-  return null;
-}
-
-// AI-powered skill level assessment
-async function assessUserSkillLevel() {
-  try {
-    // Get user's submission history and problem solving patterns
-    const userData = await collectUserData();
-    const skillLevel = calculateSkillLevel(userData);
-    
-    // Save to storage
-    chrome.storage.local.set({ 
-      skillLevel, 
-      lastAssessment: Date.now(),
-      userData 
-    });
-    
-    return skillLevel;
-  } catch (error) {
-    console.error('Error assessing skill level:', error);
-    return 'beginner'; // Default fallback
-  }
-}
-
-// Collect user data from LeetCode pages
-async function collectUserData() {
-  const userData = {
-    totalSolved: 0,
-    easySolved: 0,
-    mediumSolved: 0,
-    hardSolved: 0,
-    recentSubmissions: 0,
-    averageTime: 0,
-    streakDays: 0,
-    topicPerformance: {},
-    difficultyPerformance: {}
-  };
-
-  try {
-    // Try to get data from profile page
-    const profileResponse = await fetch('https://leetcode.com/api/user/');
-    if (profileResponse.ok) {
-      const profileData = await profileResponse.json();
-      // Parse profile data if available
-      // This is a simplified version - real implementation would parse the actual API response
-    }
-  } catch (error) {
-    console.log('Could not fetch profile data, using fallback method');
-  }
-
-  // Fallback: analyze current problems page
-  const problemRows = document.querySelectorAll('div[role="row"]');
-  let totalProblems = 0;
-  let solvedProblems = 0;
-
-  problemRows.forEach(row => {
-    const isSolved = isProblemSolved(row);
-    const difficulty = getProblemDifficulty(row);
-    const topics = getProblemTopics(row);
-    
-    if (isSolved) {
-      solvedProblems++;
-      userData[`${difficulty}Solved`]++;
-      
-      // Track topic performance
-      topics.forEach(topic => {
-        if (!userData.topicPerformance[topic]) {
-          userData.topicPerformance[topic] = { solved: 0, total: 0 };
+    // Find potentially multiple containers and pick the most likely one (e.g., visible, has children)
+    const containers = document.querySelectorAll(selector);
+    for(const container of containers) {
+        // Check if it's visible and contains interactive elements
+        if (container.offsetParent !== null && container.querySelector('button, a')) {
+            console.log("Found fallback container:", container, "using selector:", selector);
+            return container;
         }
-        userData.topicPerformance[topic].solved++;
+    }
+  }
+  console.log("No suitable fallback container found via selectors.");
+  return null;
+}
+
+// --- 3. HELPER FUNCTIONS FOR SCRAPING ---
+
+function isProblemSolved(rowElement) {
+  const solvedIndicators = [
+    'svg.text-green-s', 'svg[data-icon="fa-check"]', '.text-green-s',
+    '[data-status="ac"]', '[data-status="solved"]', // Common data attributes
+    'svg[class*="text-green"]', 'svg[class*="check"]', '.text-green-500', '.text-green-600',
+    '.text-ac', // Sometimes used
+  ];
+
+  if (solvedIndicators.some(selector => rowElement.querySelector(selector))) {
+    return true;
+  }
+  // Fallback check on icons/text within the first few children (status column)
+  const statusCell = rowElement.querySelector('div:first-child, td:first-child');
+  if (statusCell) {
+       const icons = statusCell.querySelectorAll('svg, i');
+       for(const icon of icons) {
+           // Check for specific class names or fill attributes
+           const className = icon.className?.baseVal || icon.className || '';
+           const fill = icon.getAttribute('fill');
+           if (typeof className === 'string' && (className.includes('green') || className.includes('check'))) return true;
+           if (fill === 'currentColor' && window.getComputedStyle(icon).color.includes('rgb(34, 197, 94)')) return true; // Check computed style for green color
+           if (icon.closest('[class*="text-green"]')) return true; // Check parent color class
+       }
+  }
+  return false;
+}
+
+function isProblemPremium(rowElement) {
+  const premiumIndicators = [
+    'svg[data-icon="fa-lock"]', 'svg[data-icon="fa-crown"]', '.text-yellow-s',
+    '[data-premium="true"]', '.premium-badge',
+    'svg[class*="lock"]', 'svg[class*="crown"]', 'svg[class*="text-yellow"]', 'svg[class*="text-orange"]',
+    '.text-brand-orange', // Used for premium text sometimes
+  ];
+   if (premiumIndicators.some(selector => rowElement.querySelector(selector))) {
+    return true;
+  }
+   // Check specific common locations (like next to the title link)
+   const titleLink = rowElement.querySelector('a[href*="/problems/"]');
+   if(titleLink?.parentElement?.querySelector('svg[class*="lock"], svg[class*="crown"]')) {
+       return true;
+   }
+  return false;
+}
+
+function getProblemDifficulty(rowElement) {
+  // Prefer text content within spans that have difficulty-related classes or specific text
+  const potentialSpans = rowElement.querySelectorAll('span[class*="difficulty"], span.text-xs');
+  for (const el of potentialSpans) {
+      const text = el.textContent.toLowerCase().trim();
+      if (text === 'easy' || text === 'medium' || text === 'hard') return text;
+  }
+   // Fallback: search any span/div text content more broadly
+  const textElements = rowElement.querySelectorAll('span, div');
+  for (const el of textElements) {
+      // Check parent element too, sometimes difficulty is in parent class
+      const parentClass = el.parentElement?.className?.toLowerCase() || '';
+      const text = el.textContent.toLowerCase().trim();
+
+      if (text === 'easy' || parentClass.includes('difficulty-easy')) return 'easy';
+      if (text === 'medium' || parentClass.includes('difficulty-medium')) return 'medium';
+      if (text === 'hard' || parentClass.includes('difficulty-hard')) return 'hard';
+  }
+
+  return null; // Return null if not found
+}
+
+function getProblemTopics(rowElement) {
+  // Target specific topic tag elements if possible
+  const topicCells = rowElement.querySelectorAll('div:nth-child(6), td:nth-child(6)'); // Approx tags column
+  const topics = new Set();
+
+  topicCells.forEach(cell => {
+      const topicElements = cell.querySelectorAll('a[href*="/tag/"], span[class*="tag"], div[class*="tag"]');
+      topicElements.forEach(el => {
+        let topic = '';
+        if (el.href) {
+          topic = el.href.split('/').pop()?.replace(/-/g, ' ').toLowerCase();
+        } else if (el.textContent && el.textContent.trim().length > 1) { // Ensure text is not empty
+          topic = el.textContent.trim().toLowerCase();
+        }
+        if (topic) topics.add(topic);
       });
-    }
-    
-    totalProblems++;
-    
-    // Track difficulty distribution
-    if (!userData.difficultyPerformance[difficulty]) {
-      userData.difficultyPerformance[difficulty] = { solved: 0, total: 0 };
-    }
-    userData.difficultyPerformance[difficulty].total++;
   });
 
-  userData.totalSolved = solvedProblems;
-  
-  return userData;
+   // Fallback if specific column fails
+   if (topics.size === 0) {
+       const fallbackElements = rowElement.querySelectorAll('a[href*="/tag/"]');
+        fallbackElements.forEach(el => {
+           let topic = el.href.split('/').pop()?.replace(/-/g, ' ').toLowerCase();
+            if (topic) topics.add(topic);
+        });
+   }
+
+  return Array.from(topics);
 }
 
-// Calculate skill level based on collected data
-function calculateSkillLevel(userData) {
-  const { totalSolved, easySolved, mediumSolved, hardSolved } = userData;
-  
-  // Calculate weighted score
-  let score = 0;
-  score += totalSolved * 0.3;
-  score += (mediumSolved + hardSolved) * 0.4;
-  score += hardSolved * 0.3;
-  
-  // Determine skill level
-  if (score < 50) return 'beginner';
-  if (score < 150) return 'intermediate';
-  if (score < 300) return 'advanced';
-  return 'expert';
+function getProblemInfo(rowElement) {
+    const titleCell = rowElement.querySelector('div:nth-child(2), td:nth-child(2)');
+    let linkElement = titleCell?.querySelector('a[href*="/problems/"]');
+    if (!linkElement) linkElement = rowElement.querySelector('a[href*="/problems/"]'); // Fallback
+
+    if (linkElement) {
+        const href = linkElement.href;
+        if (!href || !href.includes('/problems/')) return null;
+        const urlParts = href.split('/problems/');
+        if (urlParts.length < 2) return null;
+        const problemSlug = urlParts[1]?.split('/')[0];
+        if (!problemSlug) return null;
+
+        // Try getting text from common title structures first
+        let title = linkElement.querySelector('.truncate')?.textContent?.trim() // Common class for title text
+                 || linkElement.querySelector('span')?.textContent?.trim()
+                 || linkElement.textContent?.trim()
+                 || "Unknown Title";
+
+        title = title.replace(/^\d+\.\s*/, '').trim(); // Clean leading number
+
+        if (!title || title.length < 2 || title === "Unknown Title" || title.includes('<svg')) {
+             const cleanText = Array.from(linkElement.childNodes)
+                                 .filter(node => node.nodeType === Node.TEXT_NODE)
+                                 .map(n => n.textContent.trim())
+                                 .join(' ').replace(/^\d+\.\s*/, '').trim();
+             if (cleanText && cleanText.length > 1) {
+                 title = cleanText;
+             } else {
+                 // console.warn("Could not extract valid title for href:", href); // Reduce noise
+                 return null;
+             }
+        }
+        return { id: problemSlug, title: title, href: href };
+    }
+    return null;
 }
 
-// Get recommended difficulty based on skill level
+
+// --- 4. CORE LOGIC FUNCTIONS ---
+
+// Simplified skill assessment from page data
+function assessUserSkills() {
+  try {
+    let solvedCount = 0;
+    // Find rows directly
+    const problemRows = document.querySelectorAll('div[role="row"], tr[role="row"]');
+
+    problemRows.forEach(row => {
+        // Ensure it's a valid problem row
+        if (!row.querySelector('[role="columnheader"]') && row.querySelector('a[href*="/problems/"]')) {
+           if (isProblemSolved(row)) solvedCount++;
+        }
+    });
+    console.log(`Assess Skills: Found ${solvedCount} solved problems on page.`);
+
+    let skillLevel = 'beginner';
+    if (solvedCount >= 200) skillLevel = 'expert';
+    else if (solvedCount >= 100) skillLevel = 'advanced';
+    else if (solvedCount >= 30) skillLevel = 'intermediate';
+    else if (solvedCount >= 5) skillLevel = 'beginner';
+
+    console.log(`Skill level determined: ${skillLevel}`);
+    return skillLevel;
+
+  } catch (error) {
+    console.error('Error in assessUserSkills:', error);
+    return 'beginner';
+  }
+}
+
+
 function getRecommendedDifficulty(skillLevel) {
   const difficultyMap = {
-    beginner: ['easy', 'medium'],
-    intermediate: ['easy', 'medium', 'hard'],
+    beginner: ['easy'],
+    intermediate: ['easy', 'medium'],
     advanced: ['medium', 'hard'],
     expert: ['hard']
   };
-  
-  return difficultyMap[skillLevel] || ['easy', 'medium', 'hard'];
+  return difficultyMap[skillLevel.toLowerCase()] || ['easy', 'medium', 'hard'];
 }
 
-// Enhanced filtering function
 function filterProblems(problems, settings) {
-  return problems.filter(problem => {
-    // Check if problem is solved
-    if (settings.hideSolved && problem.solved) {
+   console.log(`Filtering ${problems.length} problems with settings:`, settings);
+   const filtered = problems.filter(problem => {
+    // Basic validation
+    if (!problem || !problem.difficulty || !problem.topics) {
+        console.warn("Skipping invalid problem object in filter:", problem);
+        return false;
+    }
+
+    if (settings.hideSolved && problem.solved) return false;
+    if (settings.hidePremium && problem.premium) return false;
+
+    const difficulties = settings.difficulties || [];
+    if (difficulties.length > 0 && !difficulties.includes(problem.difficulty)) {
+        return false;
+    }
+
+    const includedTopics = settings.includedTopics || [];
+    if (includedTopics.length > 0 && !includedTopics.some(topic => problem.topics.includes(topic))) {
       return false;
     }
-    
-    // Check if problem is premium
-    if (settings.hidePremium && problem.premium) {
+
+    const excludedTopics = settings.excludedTopics || [];
+    if (excludedTopics.length > 0 && excludedTopics.some(topic => problem.topics.includes(topic))) {
       return false;
     }
-    
-    // Check difficulty filter
-    if (settings.difficulties && settings.difficulties.length > 0) {
-      if (!settings.difficulties.includes(problem.difficulty)) {
-        return false;
-      }
-    }
-    
-    // Check include topics filter
-    if (settings.includedTopics && settings.includedTopics.length > 0) {
-      const hasIncludedTopic = settings.includedTopics.some(topic => 
-        problem.topics.includes(topic)
-      );
-      if (!hasIncludedTopic) {
-        return false;
-      }
-    }
-    
-    // Check exclude topics filter
-    if (settings.excludedTopics && settings.excludedTopics.length > 0) {
-      const hasExcludedTopic = settings.excludedTopics.some(topic => 
-        problem.topics.includes(topic)
-      );
-      if (hasExcludedTopic) {
-        return false;
-      }
-    }
-    
-    // Skill-based difficulty adjustment
+
     if (settings.skillBased) {
-      const recommendedDifficulties = getRecommendedDifficulty(userSkillLevel);
-      if (!recommendedDifficulties.includes(problem.difficulty)) {
+      const recommended = getRecommendedDifficulty(settings.skillLevel || 'beginner');
+      if (!recommended.includes(problem.difficulty)) {
         return false;
       }
     }
-    
+
     return true;
   });
+  console.log(`Filtering resulted in ${filtered.length} problems.`);
+  return filtered;
 }
 
-// Collect all problem data from the current page
+// *** UPDATED: Data collection - Find rows directly ***
 function collectProblemData() {
-  const problemRows = document.querySelectorAll('div[role="row"]');
   const problems = [];
-  
-  problemRows.forEach(row => {
-    const problemInfo = getProblemInfo(row);
-    if (problemInfo) {
-      problems.push({
-        ...problemInfo,
-        solved: isProblemSolved(row),
-        premium: isProblemPremium(row),
-        difficulty: getProblemDifficulty(row),
-        topics: getProblemTopics(row)
-      });
-    }
+  // *** FIND ALL POTENTIAL ROWS DIRECTLY ***
+  const potentialRows = document.querySelectorAll('div[role="row"], tr[role="row"]');
+  console.log(`CollectData: Found ${potentialRows.length} potential row elements.`);
+  const processedHrefs = new Set(); // Avoid duplicates
+
+  potentialRows.forEach((rowElement, index) => {
+      // Skip header row
+      if (rowElement.querySelector('[role="columnheader"]')) return;
+      // Ensure it looks like a problem row (contains a link)
+      if (!rowElement.querySelector('a[href*="/problems/"]')) return;
+
+      const problemInfo = getProblemInfo(rowElement);
+
+      // Ensure info is valid and href hasn't been processed
+      if (problemInfo && problemInfo.title && problemInfo.href && !processedHrefs.has(problemInfo.href)) {
+          const difficulty = getProblemDifficulty(rowElement);
+          if(difficulty) { // Only add if difficulty is found
+              problems.push({
+                  ...problemInfo,
+                  solved: isProblemSolved(rowElement),
+                  premium: isProblemPremium(rowElement),
+                  difficulty: difficulty,
+                  topics: getProblemTopics(rowElement)
+              });
+              processedHrefs.add(problemInfo.href); // Mark as processed
+          } else {
+               // console.warn(`CollectData: Skipping row ${index} (${problemInfo.title}) - No difficulty.`);
+          }
+      }
   });
-  
+
+  console.log(`CollectData: Collected ${problems.length} valid problems with difficulty.`);
   return problems;
 }
 
-// Function to show notifications
-function showNotification(message, type = 'info') {
-  // Remove existing notifications
-  const existingNotifications = document.querySelectorAll('.leetcode-notification');
-  existingNotifications.forEach(notification => notification.remove());
-  
+
+// --- 5. NOTIFICATION FUNCTION ---
+function showNotification(message, type = 'info', duration = 3000) {
+  document.querySelectorAll('.leetcode-notification').forEach(n => n.remove());
   const notification = document.createElement('div');
   notification.className = `leetcode-notification ${type}`;
   notification.textContent = message;
-  
-  // Add styles
+  notification.setAttribute('role', 'alert');
   notification.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 10001;
-    padding: 12px 20px;
-    border-radius: 8px;
-    color: white;
-    font-size: 14px;
-    font-weight: 500;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    animation: slideIn 0.3s ease-out;
-    max-width: 300px;
+    position: fixed; top: 20px; right: 20px; z-index: 2147483647;
+    padding: 12px 20px; border-radius: 8px; color: white;
+    font-family: sans-serif; font-size: 14px; font-weight: 500;
+    max-width: 300px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    opacity: 0; transform: translateX(100%);
+    transition: opacity 0.3s ease-out, transform 0.3s ease-out;
   `;
-  
-  // Add type-specific styles
-  if (type === 'success') {
-    notification.style.background = 'linear-gradient(135deg, #10b981, #059669)';
-  } else if (type === 'error') {
-    notification.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)';
-  } else if (type === 'warning') {
-    notification.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)';
-  } else {
-    notification.style.background = 'linear-gradient(135deg, #3b82f6, #1d4ed8)';
+  switch (type) {
+      case 'success': notification.style.background = 'linear-gradient(135deg, #10b981, #059669)'; break;
+      case 'error': notification.style.background = 'linear-gradient(135deg, #ef4444, #dc2626)'; break;
+      case 'warning': notification.style.background = 'linear-gradient(135deg, #f59e0b, #d97706)'; break;
+      default: notification.style.background = 'linear-gradient(135deg, #3b82f6, #1d4ed8)'; break;
   }
-  
-  // Add keyframe animation
-  const style = document.createElement('style');
-  style.textContent = `
-    @keyframes slideIn {
-      from { transform: translateX(100%); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
-    }
-  `;
-  document.head.appendChild(style);
-  
-  // Add to page
   document.body.appendChild(notification);
-  
-  // Remove after 3 seconds
+  requestAnimationFrame(() => {
+    notification.style.opacity = '1';
+    notification.style.transform = 'translateX(0)';
+  });
   setTimeout(() => {
     if (notification.parentNode) {
-      notification.style.animation = 'slideOut 0.3s ease-out';
-      notification.style.transform = 'translateX(100%)';
       notification.style.opacity = '0';
-      setTimeout(() => {
-        if (notification.parentNode) {
-          notification.remove();
-        }
-      }, 300);
+      notification.style.transform = 'translateX(100%)';
+      notification.addEventListener('transitionend', () => notification.remove(), { once: true });
     }
-  }, 3000);
+  }, duration);
 }
 
-// Function to inject the new button into the LeetCode page
+
+// --- 6. BUTTON INJECTION LOGIC ---
+
 function injectNewButton() {
-  const container = findRandomButtonContainer();
-  
+  console.log("Attempting to inject button...");
+  const originalRandomButton = findRandomButton();
+  const container = findButtonContainer(originalRandomButton);
+
+  // If container not found, try floating button (ensure no duplicates)
   if (!container) {
-    console.warn("No suitable button container found. Creating a new container in the page header.");
-    
-    // Try to create a container in the header area
-    const headerSelectors = [
-      'header', '.header', '[class*="header"]',
-      'nav', '.nav', '[class*="nav"]',
-      '.flex.items-center', '.flex.justify-between',
-      '[data-cy="header"]', '[data-cy="nav"]'
-    ];
-    
-    let header = null;
-    for (const selector of headerSelectors) {
-      try {
-        header = document.querySelector(selector);
-        if (header) break;
-      } catch (e) {
-        console.log('Header selector failed:', selector, e);
-      }
+    console.warn("No suitable button container found. Using floating button fallback.");
+    if (!document.getElementById('leetcode-smart-pick-btn-floating')) {
+      createFloatingButton();
     }
-    
-    if (header) {
-      // Create a new button container in the header
-      const newContainer = document.createElement('div');
-      newContainer.className = 'flex items-center gap-2 ml-4';
-      newContainer.style.cssText = 'display: flex; align-items: center; gap: 0.5rem; margin-left: 1rem;';
-      
-      // Insert the container into the header
-      header.appendChild(newContainer);
-      console.log('Created new button container in header:', newContainer);
-      
-      // Create and inject the button
-      createAndInjectButton(newContainer);
-      return;
-    }
-    
-    // Last resort: create a floating button
-    console.warn("Creating floating button as last resort");
-    createFloatingButton();
     return;
   }
-  
-  // Check if button already exists
-  if (container.querySelector('#leetcode-smart-filter-btn')) {
-    console.log('Button already exists, skipping injection');
+
+  // If container found, remove any existing floating button
+  document.getElementById('leetcode-smart-pick-btn-floating')?.remove();
+
+  // Hide original button if needed
+  if (originalRandomButton && window.getComputedStyle(originalRandomButton).display !== 'none') {
+    console.log("Hiding original LeetCode random button:", originalRandomButton);
+    originalRandomButton.style.display = 'none';
+  }
+
+  // Check if our button is already in the container
+  if (container.querySelector('#leetcode-smart-pick-btn')) {
+    console.log('Smart Pick button already exists in container, skipping injection');
     return;
   }
-  
+
   createAndInjectButton(container);
 }
 
-// Function to create and inject the button into a container
+// Consolidated Button Creation (Smart Pick ONLY)
 function createAndInjectButton(container) {
-  const button = document.createElement('button');
-  button.id = 'leetcode-smart-filter-btn';
-  button.className = 'leetcode-smart-filter-btn';
-  button.innerHTML = `
+  // Remove any old versions first just in case
+  container.querySelector('#leetcode-smart-pick-btn')?.remove();
+
+  const smartPickButton = document.createElement('button');
+  smartPickButton.id = 'leetcode-smart-pick-btn';
+  smartPickButton.className = 'leetcode-smart-filter-btn'; // Reusable style class name
+  smartPickButton.innerHTML = `
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 8px;">
       <path d="M12 2L13.09 8.26L20 9L13.09 9.74L12 16L10.91 9.74L4 9L10.91 8.26L12 2Z" fill="currentColor"/>
     </svg>
-    Smart Filter
+    Smart Pick
   `;
-  
-  // Add styles
-  button.style.cssText = `
-    display: inline-flex;
-    align-items: center;
-    padding: 8px 16px;
+  smartPickButton.style.cssText = `
+    display: inline-flex; align-items: center; padding: 8px 16px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-    margin-left: 8px;
+    color: white; border: none; border-radius: 8px;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: all 0.3s ease; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    margin-left: 8px; /* Ensure spacing */
   `;
-  
-  // Add hover effects
-  button.addEventListener('mouseenter', () => {
-    button.style.transform = 'translateY(-2px)';
-    button.style.boxShadow = '0 8px 25px rgba(102, 126, 234, 0.4)';
+  smartPickButton.addEventListener('mouseenter', () => {
+    smartPickButton.style.transform = 'translateY(-2px)';
+    smartPickButton.style.boxShadow = '0 8px 25px rgba(102, 126, 234, 0.4)';
   });
-  
-  button.addEventListener('mouseleave', () => {
-    button.style.transform = 'translateY(0)';
-    button.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.3)';
+  smartPickButton.addEventListener('mouseleave', () => {
+    smartPickButton.style.transform = 'translateY(0)';
+    smartPickButton.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.3)';
   });
-  
-  // Add click handler
-  button.addEventListener('click', handleSmartFilterClick);
-  
-  // Insert the button
-  container.appendChild(button);
-  console.log('Successfully injected Smart Filter button into container:', container);
+  smartPickButton.addEventListener('click', handleSmartRandomClick);
+
+  // Append button to the container
+  container.appendChild(smartPickButton);
+  console.log('Successfully injected Smart Pick button into:', container);
 }
 
-// Function to create a floating button as last resort
 function createFloatingButton() {
+   // Prevent duplicate floating buttons
+  if (document.getElementById('leetcode-smart-pick-btn-floating')) return;
+  // Remove any non-floating button if we resort to floating
+  document.getElementById('leetcode-smart-pick-btn')?.remove();
+
   const floatingButton = document.createElement('button');
-  floatingButton.id = 'leetcode-smart-filter-btn';
+  floatingButton.id = 'leetcode-smart-pick-btn-floating';
   floatingButton.className = 'leetcode-smart-filter-btn floating';
   floatingButton.innerHTML = `
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="margin-right: 8px;">
       <path d="M12 2L13.09 8.26L20 9L13.09 9.74L12 16L10.91 9.74L4 9L10.91 8.26L12 2Z" fill="currentColor"/>
     </svg>
-    Smart Filter
+    Smart Pick
   `;
-  
-  // Add floating button styles
   floatingButton.style.cssText = `
-    position: fixed;
-    top: 100px;
-    right: 20px;
-    z-index: 10000;
-    display: inline-flex;
-    align-items: center;
-    padding: 12px 20px;
+    position: fixed; top: 100px; right: 20px; z-index: 10000;
+    display: inline-flex; align-items: center; padding: 12px 20px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    border-radius: 12px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+    color: white; border: none; border-radius: 12px;
+    font-size: 14px; font-weight: 600; cursor: pointer;
+    transition: all 0.3s ease; box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
     backdrop-filter: blur(10px);
   `;
-  
-  // Add hover effects
   floatingButton.addEventListener('mouseenter', () => {
     floatingButton.style.transform = 'translateY(-2px) scale(1.05)';
     floatingButton.style.boxShadow = '0 12px 35px rgba(102, 126, 234, 0.5)';
   });
-  
   floatingButton.addEventListener('mouseleave', () => {
     floatingButton.style.transform = 'translateY(0) scale(1)';
     floatingButton.style.boxShadow = '0 8px 25px rgba(102, 126, 234, 0.4)';
   });
-  
-  // Add click handler
-  floatingButton.addEventListener('click', handleSmartFilterClick);
-  
-  // Insert the floating button
+  floatingButton.addEventListener('click', handleSmartRandomClick);
   document.body.appendChild(floatingButton);
-  console.log('Created floating Smart Filter button as last resort');
+  console.log('Created floating Smart Pick button');
 }
 
-// Handle the smart filter button click
-function handleSmartFilterClick() {
-  console.log('Smart Filter button clicked!');
-  
-  // Show a notification
-  showNotification('Applying Smart Filter...', 'info');
-  
-  // Get current settings and apply filters
-  chrome.storage.local.get([
-    'hideSolved', 'hidePremium', 'skillBased', 'includedTopics', 
-    'excludedTopics', 'difficulties', 'skillLevel'
-  ], (settings) => {
-    console.log('Applying filters with settings:', settings);
-    
-    // Apply the filters to the current page
-    applyFiltersToPage(settings);
-    
-    // Show success message
+// --- 7. BUTTON CLICK HANDLERS & CORE LOGIC ---
+
+function handleSmartRandomClick() {
+  console.log('Smart Pick button clicked!');
+  // Check if we are on the problem set page AND if data collection works reasonably well NOW
+  const isOnProblemSet = window.location.href.includes("/problemset/");
+  const currentProblems = isOnProblemSet ? collectProblemData() : []; // Only collect if on the right page
+
+  if (isOnProblemSet && currentProblems.length > 10) { // Check if we have enough data already
+    showNotification('Finding a smart question...', 'info');
+    runSmartRandomLogic(); // Run directly using current data
+  } else {
+    // If not on problem set, or if data collection failed, redirect and wait
+    const reason = isOnProblemSet ? `only ${currentProblems.length} problems found` : "not on problem set page";
+    console.warn(`Redirecting because: ${reason}`);
+    showNotification('Navigating to problem list to find question...', 'info');
+    chrome.storage.local.set({ runSmartRandomOnLoad: true }, () => {
+      window.location.href = 'https://leetcode.com/problemset/';
+    });
+  }
+}
+
+
+// Core logic for picking and navigating (includes debug logs)
+function runSmartRandomLogic() {
+  console.log('Running Smart Random Logic...');
+  chrome.storage.local.get(null, (settings) => {
+     if (chrome.runtime.lastError) {
+         console.error("Error getting settings:", chrome.runtime.lastError);
+         showNotification('Could not load settings for filtering.', 'error');
+         return;
+     }
+
+    // Define default settings inline
+    const effectiveSettings = {
+        hideSolved: settings.hideSolved || false,
+        hidePremium: settings.hidePremium || false,
+        skillBased: settings.skillBased === undefined ? true : settings.skillBased,
+        includedTopics: settings.includedTopics || [],
+        excludedTopics: settings.excludedTopics || [],
+        difficulties: settings.difficulties && settings.difficulties.length > 0 ? settings.difficulties : ['easy', 'medium', 'hard'], // Default if empty
+        skillLevel: settings.skillLevel || 'beginner'
+    };
+    userSkillLevel = effectiveSettings.skillLevel;
+
+    console.log('--- Debug: Applying random pick with effective settings:', effectiveSettings);
+
+    const allProblems = collectProblemData(); // Re-collect data just to be sure it's fresh
+    console.log(`--- Debug: Collected ${allProblems.length} problems from the page.`);
+
+    if (allProblems.length === 0) {
+      showNotification('Could not find any problems. Try refreshing the page.', 'error');
+      console.error("--- Debug: collectProblemData returned an empty array.");
+      return;
+    }
+
+    const filteredProblems = filterProblems(allProblems, effectiveSettings);
+    console.log(`--- Debug: Filtered down to ${filteredProblems.length} problems.`);
+
+
+    if (filteredProblems.length === 0) {
+      showNotification('No problems match your criteria. Try adjusting filters in the popup.', 'warning');
+      console.warn("--- Debug: filterProblems returned an empty array. Check filters/data.");
+      return;
+    }
+
+    const chosenProblem = filteredProblems[Math.floor(Math.random() * filteredProblems.length)];
+    console.log('--- Debug: Chosen problem:', chosenProblem);
+
+    if (!chosenProblem || !chosenProblem.href) {
+        showNotification('Error selecting problem. Could not find URL.', 'error');
+        console.error("--- Debug: Chosen problem is invalid or missing href.", chosenProblem);
+        return;
+    }
+
+    console.log('Chosen problem title:', chosenProblem.title);
+    showNotification(`Navigating to: ${chosenProblem.title}`, 'success');
+
+    console.log(`--- Debug: Navigating to ${chosenProblem.href}`);
     setTimeout(() => {
-      showNotification('Smart Filter applied successfully!', 'success');
-    }, 1000);
-  });
-}
-
-// Clear all applied filters
-function clearAllFilters() {
-  try {
-    console.log('Clearing all filters...');
-    
-    const problemsTable = document.querySelector('table, [role="grid"], .problems-table, .question-list, [data-cy="problems-table"]');
-    if (!problemsTable) {
-      console.log('No problems table found to clear filters');
-      return;
-    }
-    
-    const problemRows = problemsTable.querySelectorAll('tr, [role="row"], .question-item, [data-cy="problem-row"]');
-    
-    problemRows.forEach((row, index) => {
-      if (index === 0) return; // Skip header row
-      
-      // Show all rows
-      showProblemRow(row);
-    });
-    
-    // Update problem count
-    updateProblemCount();
-    
-    console.log('All filters cleared');
-    showNotification('All filters cleared!', 'success');
-    
-  } catch (error) {
-    console.error('Error clearing filters:', error);
-    showNotification('Error clearing filters', 'error');
-  }
-}
-
-// Enhanced filter application with better error handling
-function applyFiltersToPage(settings) {
-  try {
-    console.log('Applying enhanced filters to page:', settings);
-    
-    // Find the problems table with multiple selectors
-    const tableSelectors = [
-      'table', 
-      '[role="grid"]', 
-      '.problems-table', 
-      '.question-list', 
-      '[data-cy="problems-table"]',
-      '.problems-list',
-      '[class*="problem"]',
-      '[class*="question"]'
-    ];
-    
-    let problemsTable = null;
-    for (const selector of tableSelectors) {
-      problemsTable = document.querySelector(selector);
-      if (problemsTable) {
-        console.log(`Found problems table with selector: ${selector}`);
-        break;
-      }
-    }
-    
-    if (!problemsTable) {
-      console.log('No problems table found with any selector');
-      showNotification('No problems table found on this page', 'warning');
-      return;
-    }
-    
-    // Get all problem rows with multiple selectors
-    const rowSelectors = [
-      'tr', 
-      '[role="row"]', 
-      '.question-item', 
-      '[data-cy="problem-row"]',
-      '.problem-item',
-      '[class*="problem-row"]',
-      '[class*="question-row"]'
-    ];
-    
-    let problemRows = [];
-    for (const selector of rowSelectors) {
-      const rows = problemsTable.querySelectorAll(selector);
-      if (rows.length > 0) {
-        problemRows = Array.from(rows);
-        console.log(`Found ${rows.length} problem rows with selector: ${selector}`);
-        break;
-      }
-    }
-    
-    if (problemRows.length === 0) {
-      console.log('No problem rows found');
-      showNotification('No problem rows found on this page', 'warning');
-      return;
-    }
-    
-    let hiddenCount = 0;
-    let totalCount = problemRows.length;
-    
-    problemRows.forEach((row, index) => {
-      if (index === 0) return; // Skip header row
-      
-      let shouldHide = false;
-      let hideReason = '';
-      
       try {
-        // Check if problem is solved
-        if (settings.hideSolved && isProblemSolved(row)) {
-          shouldHide = true;
-          hideReason = 'solved';
-        }
-        
-        // Check if problem is premium
-        if (settings.hidePremium && isProblemPremium(row)) {
-          shouldHide = true;
-          hideReason = 'premium';
-        }
-        
-        // Check difficulty filter
-        if (settings.difficulties && settings.difficulties.length > 0) {
-          const difficulty = getProblemDifficulty(row);
-          if (difficulty && !settings.difficulties.includes(difficulty.toLowerCase())) {
-            shouldHide = true;
-            hideReason = 'difficulty';
-          }
-        }
-        
-        // Check topic filters
-        if (settings.includedTopics && settings.includedTopics.length > 0) {
-          const topics = getProblemTopics(row);
-          const hasIncludedTopic = topics.some(topic => 
-            settings.includedTopics.includes(topic)
-          );
-          if (!hasIncludedTopic) {
-            shouldHide = true;
-            hideReason = 'topic-include';
-          }
-        }
-        
-        if (settings.excludedTopics && settings.excludedTopics.length > 0) {
-          const topics = getProblemTopics(row);
-          const hasExcludedTopic = topics.some(topic => 
-            settings.excludedTopics.includes(topic)
-          );
-          if (hasExcludedTopic) {
-            shouldHide = true;
-            hideReason = 'topic-exclude';
-          }
-        }
-        
-        // Apply hiding/showing
-        if (shouldHide) {
-          hideProblemRow(row, hideReason);
-          hiddenCount++;
-        } else {
-          showProblemRow(row);
-        }
-        
-      } catch (rowError) {
-        console.error(`Error processing row ${index}:`, rowError);
-        // Continue with other rows
+           const absoluteUrl = new URL(chosenProblem.href, window.location.origin).href;
+           window.location.href = absoluteUrl;
+      } catch (e) {
+           console.error("Error creating absolute URL or navigating:", e, chosenProblem.href);
+           showNotification('Failed to navigate to the chosen problem.', 'error');
       }
-    });
-    
-    // Update problem count display
-    updateProblemCount();
-    
-    const visibleCount = totalCount - hiddenCount - 1; // -1 for header
-    console.log(`Filtering complete: ${visibleCount} visible out of ${totalCount - 1} total problems`);
-    
-    showNotification(`Filter applied: ${visibleCount} problems visible`, 'success');
-    
-  } catch (error) {
-    console.error('Error applying enhanced filters:', error);
-    showNotification('Error applying filters: ' + error.message, 'error');
-  }
-}
-
-// Check if a problem is solved
-function isProblemSolved(row) {
-  const solvedIndicators = row.querySelectorAll('svg, i, span, div');
-  
-  for (const indicator of solvedIndicators) {
-    const className = indicator.className || '';
-    const textContent = indicator.textContent || '';
-    const innerHTML = indicator.innerHTML || '';
-    
-    if (className.includes('green') || 
-        className.includes('check') || 
-        className.includes('solved') ||
-        className.includes('accepted') ||
-        textContent.includes('✓') ||
-        innerHTML.includes('check') ||
-        innerHTML.includes('solved')) {
-      return true;
-    }
-  }
-  
-  return false;
-}
-
-// Check if a problem is premium
-function isProblemPremium(row) {
-  const premiumIndicators = row.querySelectorAll('svg, i, span, div');
-  
-  for (const indicator of premiumIndicators) {
-    const className = indicator.className || '';
-    const textContent = indicator.textContent || '';
-    
-    if (className.includes('premium') || 
-        className.includes('crown') || 
-        className.includes('lock') ||
-        textContent.includes('Premium') ||
-        textContent.includes('Crown')) {
-      return true;
-    }
-  }
-  
-  return false;
-}
-
-// Get problem difficulty
-function getProblemDifficulty(row) {
-  const difficultyElements = row.querySelectorAll('[class*="difficulty"], [class*="level"], span, div');
-  
-  for (const element of difficultyElements) {
-    const className = element.className || '';
-    const textContent = element.textContent || '';
-    
-    if (className.includes('easy') || textContent.includes('Easy')) {
-      return 'easy';
-    } else if (className.includes('medium') || textContent.includes('Medium')) {
-      return 'medium';
-    } else if (className.includes('hard') || textContent.includes('Hard')) {
-      return 'hard';
-    }
-  }
-  
-  return null;
-}
-
-// Get problem topics
-function getProblemTopics(row) {
-  const topics = [];
-  const topicElements = row.querySelectorAll('a[href*="/tag/"], [class*="tag"], span[class*="topic"]');
-  
-  topicElements.forEach(element => {
-    let topic = '';
-    if (element.href) {
-      topic = element.href.split('/').pop()?.toLowerCase();
-    } else if (element.textContent) {
-      topic = element.textContent.trim().toLowerCase();
-    }
-    
-    if (topic && topic.length > 0) {
-      topics.push(topic);
-    }
-  });
-  
-  return topics;
-}
-
-// Hide a problem row
-function hideProblemRow(row, reason) {
-  if (!row.dataset.originalDisplay) {
-    row.dataset.originalDisplay = row.style.display || 'table-row';
-  }
-  
-  row.style.display = 'none';
-  row.dataset.filteredReason = reason;
-  
-  // Add visual indicator that it's filtered
-  if (!row.querySelector('.filter-indicator')) {
-    const indicator = document.createElement('div');
-    indicator.className = 'filter-indicator';
-    indicator.textContent = `Filtered: ${reason}`;
-    indicator.style.cssText = `
-      position: absolute;
-      top: 0;
-      right: 0;
-      background: #ef4444;
-      color: white;
-      padding: 2px 6px;
-      font-size: 10px;
-      border-radius: 4px;
-      z-index: 10;
-    `;
-    
-    row.style.position = 'relative';
-    row.appendChild(indicator);
-  }
-}
-
-// Show a problem row
-function showProblemRow(row) {
-  if (row.dataset.originalDisplay) {
-    row.style.display = row.dataset.originalDisplay;
-    delete row.dataset.filteredReason;
-    
-    // Remove filter indicator
-    const indicator = row.querySelector('.filter-indicator');
-    if (indicator) {
-      indicator.remove();
-    }
-  }
-}
-
-// Update problem count display
-function updateProblemCount() {
-  const problemsTable = document.querySelector('table, [role="grid"], .problems-table, .question-list, [data-cy="problems-table"]');
-  if (!problemsTable) return;
-  
-  const visibleRows = Array.from(problemsTable.querySelectorAll('tr, [role="row"], .question-item, [data-cy="problem-row"]'))
-    .filter(row => row.style.display !== 'none');
-  
-  const totalRows = problemsTable.querySelectorAll('tr, [role="row"], .question-item, [data-cy="problem-row"]').length - 1; // -1 for header
-  const visibleCount = visibleRows.length - 1; // -1 for header
-  
-  console.log(`Filtered problems: ${visibleCount} visible out of ${totalRows} total`);
-  
-  // Try to update any count display on the page
-  const countSelectors = [
-    '[class*="count"]',
-    '[class*="total"]',
-    '[class*="problems"]',
-    '[data-cy="problem-count"]'
-  ];
-  
-  countSelectors.forEach(selector => {
-    try {
-      const elements = document.querySelectorAll(selector);
-      elements.forEach(element => {
-        const text = element.textContent;
-        if (text.match(/\d+/)) {
-          element.textContent = text.replace(/\d+/, visibleCount);
-        }
-      });
-    } catch (e) {
-      // Ignore errors
-    }
+    }, 1200); // Slightly longer delay
   });
 }
 
-// Main execution function
+// REMOVED functions related to visual filtering
+
+// --- 8. MAIN EXECUTION & MESSAGE LISTENER ---
+// *** UPDATED with SIMPLIFIED page ready check ***
 function main() {
   console.log('LeetCode Smart Filter extension loaded');
-  
-  // Wait for the page to be fully loaded
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      setTimeout(injectNewButton, 1000);
-    });
-  } else {
-    setTimeout(injectNewButton, 1000);
-  }
-  
-  // Also listen for navigation changes (for SPA behavior)
-  let lastUrl = location.href;
-  new MutationObserver(() => {
-    const url = location.href;
-    if (url !== lastUrl) {
-      lastUrl = url;
-      console.log('URL changed, re-injecting button');
-      setTimeout(injectNewButton, 1000);
+  const problemListUrl = 'leetcode.com/problemset';
+
+  // Check for redirect flag
+  chrome.storage.local.get('runSmartRandomOnLoad', (result) => {
+    if (result.runSmartRandomOnLoad && window.location.href.includes(problemListUrl)) {
+      console.log('Flag found after redirect, preparing to run Smart Pick...');
+      chrome.storage.local.remove('runSmartRandomOnLoad');
+      showNotification('Loading problem list for Smart Pick...', 'info');
+
+      const maxWaitTime = 20000;
+      const checkInterval = 500;
+      let elapsedTime = 0;
+
+      // *** SIMPLIFIED CHECK: Rely only on finding enough links ***
+      const linkSelector = 'a[href*="/problems/"]';
+      const minLinks = 20; // Wait for at least 20 problem links
+
+      const checkPageReady = setInterval(() => {
+        elapsedTime += checkInterval;
+        const linksFound = document.querySelectorAll(linkSelector).length;
+
+        // *** Proceed if enough links are found ***
+        if (linksFound >= minLinks) {
+          clearInterval(checkPageReady);
+          console.log(`Problem list ready (${linksFound} links found). Running Smart Pick logic.`);
+          // Give slightly more time for data extraction functions to work reliably
+          setTimeout(runSmartRandomLogic, 1000); // Increased delay
+        } else if (elapsedTime >= maxWaitTime) {
+          clearInterval(checkPageReady);
+          console.error(`Timeout waiting for problem list links (${linksFound}/${minLinks} found).`);
+          showNotification('Could not load problem list fully after redirect.', 'error');
+        }
+      }, checkInterval);
+    } else if (result.runSmartRandomOnLoad) {
+        console.warn('Redirect flag found, but not on problem list page. Clearing.');
+        chrome.storage.local.remove('runSmartRandomOnLoad');
     }
-  }).observe(document, { subtree: true, childList: true });
-  
-  // Listen for messages from popup and background script
+  });
+
+  // Inject button after page load
+   if (document.readyState === 'complete') {
+       requestAnimationFrame(() => setTimeout(injectNewButton, 500));
+   } else {
+       window.addEventListener('load', () => {
+          requestAnimationFrame(() => setTimeout(injectNewButton, 500));
+       }, { once: true });
+   }
+
+  // Observe SPA navigation
+  let lastUrl = location.href;
+  const observer = new MutationObserver(() => {
+    const currentUrl = location.href;
+    if (currentUrl !== lastUrl) {
+        // Debounce injection slightly
+        setTimeout(() => {
+            if(location.href === currentUrl) { // Check again in case of rapid navigation
+                lastUrl = currentUrl;
+                console.log('URL changed (SPA), re-injecting button');
+                requestAnimationFrame(() => setTimeout(injectNewButton, 1000));
+            }
+        }, 300);
+    }
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+
+  // Listen for messages from popup
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     console.log('Content script received message:', request);
-    
-    if (request.action === 'ping') {
-      // Respond to ping to confirm content script is ready
-      sendResponse({ success: true, message: 'Content script is ready' });
-      return true;
-    }
-    
-    if (request.action === 'triggerSmartFilter') {
-      handleSmartFilterClick();
-      sendResponse({ success: true, message: 'Smart filter triggered' });
-    }
-    
-    if (request.action === 'assessSkills') {
-      // Simple skill assessment for now
-      const skillLevel = assessUserSkills();
-      sendResponse({ success: true, skillLevel });
-    }
-    
-    if (request.action === 'clearFilters') {
-      clearAllFilters();
-      sendResponse({ success: true, message: 'Filters cleared' });
-    }
-    
-    if (request.action === 'refreshPage') {
-      // Refresh the current page
-      window.location.reload();
-      sendResponse({ success: true, message: 'Page refresh initiated' });
-    }
-    
-    return true; // Keep message channel open for async response
-  });
-}
 
-// Simple skill assessment function
-function assessUserSkills() {
-  try {
-    console.log('Starting comprehensive skill assessment...');
-    
-    let solvedCount = 0;
-    let totalProblems = 0;
-    let premiumCount = 0;
-    
-    // Strategy 1: Look for problems table/list with better selectors
-    const problemsTable = document.querySelector('table, [role="grid"], .problems-table, .question-list, [data-cy="problems-table"]');
-    
-    if (problemsTable) {
-      console.log('Found problems table, analyzing...');
-      
-      // Look for problem rows
-      const problemRows = problemsTable.querySelectorAll('tr, [role="row"], .question-item, [data-cy="problem-row"]');
-      totalProblems = problemRows.length;
-      console.log(`Total problem rows found: ${totalProblems}`);
-      
-      // Count solved problems by looking for checkmarks in each row
-      problemRows.forEach((row, index) => {
-        if (index === 0) return; // Skip header row
-        
-        // Look for solved indicators in this row
-        const solvedIndicators = row.querySelectorAll('svg, i, span, div');
-        let isSolved = false;
-        
-        solvedIndicators.forEach(indicator => {
-          const className = indicator.className || '';
-          const textContent = indicator.textContent || '';
-          const innerHTML = indicator.innerHTML || '';
-          
-          // Check for various solved indicators
-          if (className.includes('green') || 
-              className.includes('check') || 
-              className.includes('solved') ||
-              className.includes('accepted') ||
-              textContent.includes('✓') ||
-              innerHTML.includes('check') ||
-              innerHTML.includes('solved')) {
-            isSolved = true;
-          }
-        });
-        
-        if (isSolved) {
-          solvedCount++;
-          console.log(`Row ${index} is solved`);
-        }
-        
-        // Check for premium problems
-        const premiumIndicators = row.querySelectorAll('svg, i, span, div');
-        let isPremium = false;
-        
-        premiumIndicators.forEach(indicator => {
-          const className = indicator.className || '';
-          const textContent = indicator.textContent || '';
-          
-          if (className.includes('premium') || 
-              className.includes('crown') || 
-              className.includes('lock') ||
-              textContent.includes('Premium') ||
-              textContent.includes('Crown')) {
-            isPremium = true;
-          }
-        });
-        
-        if (isPremium) {
-          premiumCount++;
-        }
-      });
+    switch (request.action) {
+        case 'ping':
+            sendResponse({ success: true, message: 'Content script is ready' });
+            break;
+        case 'triggerSmartRandom':
+            handleSmartRandomClick();
+            sendResponse({ success: true, message: 'Smart random triggered' });
+            break;
+        case 'assessSkills':
+            try {
+                const skillLevel = assessUserSkills();
+                sendResponse({ success: true, skillLevel });
+            } catch (e) { sendResponse({ success: false, error: e.message }); }
+            break;
+        case 'clearFilters':
+             console.log("'clearFilters' received, no visual action taken.");
+             sendResponse({ success: true, message: 'No visual filters to clear.' });
+             break;
+        case 'refreshPage':
+             window.location.reload();
+             break;
+        default:
+            sendResponse({ success: false, error: 'Unknown action' });
     }
-    
-    // Strategy 2: Look for solved count in profile/stats area
-    const profileSelectors = [
-      '[class*="profile"]',
-      '[class*="stats"]',
-      '[class*="achievement"]',
-      '[class*="solved"]',
-      '[class*="count"]',
-      '[data-cy="profile"]',
-      '[data-cy="stats"]'
-    ];
-    
-    profileSelectors.forEach(selector => {
-      try {
-        const elements = document.querySelectorAll(selector);
-        elements.forEach(element => {
-          const text = element.textContent;
-          
-          // Look for various statistics
-          const solvedMatch = text.match(/(\d+)\s*(?:problems?|solved|completed)/i);
-          if (solvedMatch) {
-            const count = parseInt(solvedMatch[1]);
-            if (count > solvedCount) {
-              solvedCount = count;
-              console.log(`Found higher solved count from profile: ${count}`);
-            }
-          }
-          
-          const totalMatch = text.match(/(\d+)\s*(?:total|problems?|questions)/i);
-          if (totalMatch) {
-            const count = parseInt(totalMatch[1]);
-            if (count > totalProblems) {
-              totalProblems = count;
-              console.log(`Found total problems count: ${count}`);
-            }
-          }
-        });
-      } catch (e) {
-        console.log('Profile selector failed:', selector, e);
-      }
-    });
-    
-    // Strategy 3: Look for specific LeetCode elements
-    const leetcodeSelectors = [
-      'a[href*="/problems/"]',
-      '[data-cy="problem-title"]',
-      '.question-title',
-      '.problem-title'
-    ];
-    
-    leetcodeSelectors.forEach(selector => {
-      try {
-        const elements = document.querySelectorAll(selector);
-        if (elements.length > totalProblems) {
-          totalProblems = elements.length;
-          console.log(`Found ${elements.length} problems with selector: ${selector}`);
-        }
-      } catch (e) {
-        console.log('LeetCode selector failed:', selector, e);
-      }
-    });
-    
-    // Strategy 4: Look for difficulty indicators to estimate total
-    const difficultySelectors = [
-      '[class*="difficulty"]',
-      '[class*="level"]',
-      'span[class*="easy"]',
-      'span[class*="medium"]',
-      'span[class*="hard"]'
-    ];
-    
-    let difficultyCount = 0;
-    difficultySelectors.forEach(selector => {
-      try {
-        const elements = document.querySelectorAll(selector);
-        difficultyCount += elements.length;
-      } catch (e) {
-        console.log('Difficulty selector failed:', selector, e);
-      }
-    });
-    
-    if (difficultyCount > totalProblems) {
-      totalProblems = difficultyCount;
-      console.log(`Estimated total problems from difficulty indicators: ${difficultyCount}`);
-    }
-    
-    console.log(`Final assessment: ${solvedCount} solved problems out of ${totalProblems} total, ${premiumCount} premium`);
-    
-    // Calculate skill level based on solved problems
-    let skillLevel = 'beginner';
-    
-    if (solvedCount >= 200) {
-      skillLevel = 'expert';
-    } else if (solvedCount >= 100) {
-      skillLevel = 'advanced';
-    } else if (solvedCount >= 30) {
-      skillLevel = 'intermediate';
-    } else if (solvedCount >= 5) {
-      skillLevel = 'beginner';
-    } else {
-      skillLevel = 'beginner';
-    }
-    
-    console.log(`Skill level determined: ${skillLevel}`);
-    return skillLevel;
-    
-  } catch (error) {
-    console.error('Error in skill assessment:', error);
-    return 'beginner'; // Default fallback
-  }
+    return false; // All responses are synchronous
+  });
 }
 
 // Start the extension

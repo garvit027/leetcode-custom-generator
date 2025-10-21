@@ -37,35 +37,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
   
+  // You can keep this if you plan to use it, but it's not strictly necessary
+  // for your current popup logic.
   if (request.action === 'openPopup') {
     // This could be used to programmatically open the popup
+    console.log("Open popup action received (no-op)");
     sendResponse({ success: true });
-  }
-});
-
-// Handle tab updates to inject content script when needed
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.status === 'complete' && tab.url && tab.url.includes('leetcode.com')) {
-    console.log('LeetCode tab updated, injecting content script');
-    
-    // Inject content script if not already injected
-    chrome.scripting.executeScript({
-      target: { tabId: tabId },
-      files: ['content-script.js']
-    }).catch(err => {
-      console.log('Content script already injected or injection failed:', err);
-    });
-  }
-});
-
-// Handle extension icon click
-chrome.action.onClicked.addListener((tab) => {
-  if (tab.url && tab.url.includes('leetcode.com')) {
-    console.log('Extension icon clicked on LeetCode tab');
-    
-    // Send message to content script to trigger smart filter
-    chrome.tabs.sendMessage(tab.id, { action: 'triggerSmartFilter' }).catch(err => {
-      console.log('Could not send message to content script:', err);
-    });
   }
 });

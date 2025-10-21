@@ -7,8 +7,7 @@
     "storage",
     "activeTab",
     "scripting",
-    "tabs",
-    "alarms"
+    "tabs"
   ],
   "host_permissions": [
     "https://leetcode.com/*",
@@ -25,7 +24,7 @@
   "content_scripts": [
     {
       "matches": [
-        "https://leetcode.com/problemset/*", 
+        "https://leetcode.com/problemset/*",
         "https://leetcode.com/problems/*",
         "https://leetcode.com/study-plan/*"
       ],
@@ -35,8 +34,12 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["images/icon48.png"],
-      "matches": ["https://leetcode.com/*"]
+      "resources": [
+        "images/icon48.png" 
+      ],
+      "matches": [
+        "https://leetcode.com/*"
+      ]
     }
   ],
   "background": {
