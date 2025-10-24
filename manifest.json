@@ -1,48 +1,18 @@
 {
-  "manifest_version": 3,
-  "name": "LeetCode Smart Question Filter",
-  "version": "2.0",
-  "description": "AI-powered LeetCode question filtering with skill assessment, topic selection, and smart recommendations.",
-  "permissions": [
-    "storage",
-    "activeTab",
-    "scripting",
-    "tabs"
-  ],
-  "host_permissions": [
-    "https://leetcode.com/*",
-    "https://*.leetcode.com/*"
-  ],
-  "action": {
-    "default_popup": "popup.html",
-    "default_icon": {
-      "16": "images/icon16.png",
-      "48": "images/icon48.png",
-      "128": "images/icon128.png"
-    }
-  },
-  "content_scripts": [
-    {
-      "matches": [
-        "https://leetcode.com/problemset/*",
-        "https://leetcode.com/problems/*",
-        "https://leetcode.com/study-plan/*"
-      ],
-      "js": ["content-script.js"],
-      "run_at": "document_idle"
-    }
-  ],
-  "web_accessible_resources": [
-    {
-      "resources": [
-        "images/icon48.png" 
-      ],
-      "matches": [
+    "manifest_version": 3,
+    "name": "Custom LeetCode Generator",
+    "version": "1.0",
+    "description": "Opens a random LeetCode problem based on your preferences.",
+    "action": {
+        "default_popup": "popup.html"
+    },
+    "background": {
+        "service_worker": "background.js"
+    },
+    "permissions": [
+        "tabs"
+    ],
+    "host_permissions": [
         "https://leetcode.com/*"
-      ]
-    }
-  ],
-  "background": {
-    "service_worker": "background.js"
-  }
+    ]
 }

@@ -1,130 +1,49 @@
-# LeetCode Smart Filter Chrome Extension
+# Custom LeetCode Generator 🚀
 
-A powerful Chrome extension that provides AI-powered problem filtering, skill assessment, and smart recommendations for LeetCode users.
+A Chrome extension that lets you find a random LeetCode problem based on your exact preferences. Stop searching and start solving!
 
-## 🚀 Features
+![Screenshot of the LeetCode Generator popup](https://i.ibb.co/Xv59dcr/Screenshot-2025-10-24-at-8-30-02-PM.png)
 
-### **AI-Powered Skill Assessment**
-- Automatically analyzes your solved problems and performance patterns
-- Determines skill level (Beginner/Intermediate/Advanced/Expert)
-- Provides visual progress indicators and statistics
-
-### **Advanced Problem Filtering**
-- **Hide Solved Problems**: Filter out completed problems to focus on new challenges
-- **Hide Premium Problems**: Remove premium content to focus on free problems
-- **Difficulty Filtering**: Filter by Easy, Medium, or Hard problems
-- **Topic Filtering**: Include/exclude specific algorithm topics (50+ categories)
-- **Real-time Filtering**: Instant visual feedback with problem count updates
-
-### **Smart Recommendations**
-- Skill-based difficulty recommendations
-- Topic-based problem suggestions
-- Personalized learning paths
-
-## 🛠️ Installation
-
-1. **Download the Extension**
-   ```bash
-   git clone https://github.com/yourusername/leetcode-smart-filter.git
-   cd leetcode-smart-filter
-   ```
-
-2. **Load in Chrome**
-   - Open Chrome and go to `chrome://extensions/`
-   - Enable "Developer mode" in the top right
-   - Click "Load unpacked" and select the project folder
-   - The extension will appear in your Chrome toolbar
-
-3. **Start Using**
-   - Navigate to [LeetCode Problems](https://leetcode.com/problemset/)
-   - Click the extension icon to open the Smart Filter
-   - Configure your preferences and start filtering!
-
-## 📁 Project Structure
-
-```
-leetcode-smart-filter/
-├── manifest.json          # Extension configuration
-├── popup.html            # Main popup interface
-├── popup.js              # Popup functionality and UI logic
-├── content-script.js     # Content script for LeetCode page interaction
-├── background.js         # Background service worker
-├── images/               # Extension icons
-│   ├── icon16.png
-│   ├── icon48.png
-│   └── icon128.png
-└── README.md            # This file
-```
-
-## 🎯 How to Use
-
-### **Skill Assessment**
-1. Click "Assess My Skills" button
-2. Extension analyzes your LeetCode profile
-3. View your skill level and progress statistics
-
-### **Problem Filtering**
-1. Configure your filter preferences:
-   - Toggle "Hide Solved Problems"
-   - Toggle "Hide Premium Problems"
-   - Select difficulty levels
-   - Choose topics to include/exclude
-2. Click "Smart Filter" to apply filters
-3. Use "Clear Filters" to reset
-
-### **Quick Actions**
-- **Smart Filter**: Apply all configured filters
-- **Clear Filters**: Remove all applied filters
-- **Reset Settings**: Return to default configuration
-- **Refresh Page**: Reload the LeetCode page
-
-## 🛡️ Privacy & Security
-
-- **No Data Collection**: All processing happens locally in your browser
-- **No External APIs**: No data is sent to external servers
-- **Chrome Storage**: Settings are stored locally using Chrome's storage API
-- **Open Source**: Full source code available for review
-
-## 🔧 Technical Details
-
-### **Technologies Used**
-- **Frontend**: HTML5, CSS3, JavaScript (ES6+)
-- **Chrome APIs**: Extension APIs, Storage API, Runtime API, Scripting API
-- **Architecture**: Manifest V3, Content Scripts, Background Service Worker
-
-### **Key Features**
-- **DOM Manipulation**: Advanced parsing and filtering of LeetCode pages
-- **Asynchronous Programming**: Async/await patterns with error handling
-- **Cross-Script Communication**: Message passing between extension components
-- **Performance Optimization**: Efficient DOM queries and memory management
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- LeetCode for providing the platform
-- Chrome Extension API documentation
-- Open source community for inspiration
-
-## 📞 Support
-
-If you encounter any issues or have questions:
-- Open an issue on GitHub
-- Check the troubleshooting section
-- Review the Chrome extension documentation
+*Replace `screenshot.png` with a real screenshot of your extension. Just name your image file `screenshot.png` and put it in the same directory.*
 
 ---
 
-**Made with ❤️ for the LeetCode community**
+## 🎯 Features
+
+This extension adds a popup to your browser that lets you filter for the *exact* kind of problem you want to practice:
+
+* **By Topic:** (e.g., Array, String, Hash Table, Graph)
+* **By Difficulty:** (Easy, Medium, Hard)
+* **By Solved Status:** (Not Solved, Solved/Accepted, Attempted)
+* **By Premium Status:** (All Problems, Free Only, Premium Only)
+
+Click "Generate Problem," and the extension will instantly open a new tab with a random problem that matches all your filters.
+
+If no problems match your criteria (e.g., "Hard" + "Solved" + "Array" and you haven't solved any), it will show you a "No problems found" message.
+
+---
+
+## 🛠️ How It Works
+
+This extension doesn't scrape the LeetCode website. Instead, it uses LeetCode's internal **GraphQL API**—the same one the official website uses.
+
+1.  It reads your preferences from the popup.
+2.  It makes a query to the API to find the **total number** of problems that match your filters.
+3.  It picks a random number between 0 and that total.
+4.  It makes a second query to fetch the *one* problem at that random position.
+5.  It opens the problem's URL (`https://leetcode.com/problems/...`) in a new tab.
+
+---
+
+## 🔧 Installation (for Development)
+
+Since this extension is not yet on the Chrome Web Store, you can load it locally:
+
+1.  **Download or Clone:** Download this project's code and unzip it, or clone the repository.
+2.  **Open Chrome Extensions:** Open Google Chrome and navigate to `chrome://extensions`.
+3.  **Enable Developer Mode:** Turn on the "Developer mode" toggle in the top-right corner.
+4.  **Load Unpacked:** Click the "Load unpacked" button.
+5.  **Select Folder:** Select the folder containing the project files (the one with `manifest.json` in it).
+6.  **Done!** The extension icon should now appear in your browser's toolbar. You may need to click the "puzzle piece" icon to pin it.
+
+---
