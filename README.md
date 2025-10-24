@@ -2,7 +2,7 @@
 
 A Chrome extension that lets you find a random LeetCode problem based on your exact preferences. Stop searching and start solving!
 
-![Screenshot of the LeetCode Generator popup](https://i.ibb.co/5fjdzbg/Screenshot-2025-10-24-at-8-30-02-PM.png)
+![Screenshot of the LeetCode Generator popup](https://i.postimg.cc/pr4y9ptH/Screenshot-2025-10-24-at-8-30-02-PM.png)
 
 
 
