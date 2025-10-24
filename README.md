@@ -4,7 +4,7 @@ A Chrome extension that lets you find a random LeetCode problem based on your ex
 
 ![Screenshot of the LeetCode Generator popup](https://i.ibb.co/5fjdzbg/Screenshot-2025-10-24-at-8-30-02-PM.png)
 
-*Replace `screenshot.png` with a real screenshot of your extension. Just name your image file `screenshot.png` and put it in the same directory.*
+
 
 ---
 
